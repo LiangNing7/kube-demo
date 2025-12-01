@@ -21,6 +21,7 @@ type ProvisionRequestStatus struct {
 	DbReady      bool
 }
 
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ProvisionRequest struct {
 	metav1.TypeMeta
 	metav1.ObjectMeta
@@ -29,6 +30,7 @@ type ProvisionRequest struct {
 	Status ProvisionRequestStatus
 }
 
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ProvisionRequestList struct {
 	metav1.TypeMeta
 	metav1.ListMeta
