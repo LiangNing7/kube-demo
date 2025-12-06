@@ -1,51 +1,65 @@
 /*
 Copyright © 2025 NAME HERE <EMAIL ADDRESS>
-
 */
 package cmd
 
 import (
-	"os"
+	"context"
 
 	"github.com/spf13/cobra"
+	gserver "k8s.io/apiserver/pkg/server"
 )
-
-
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "kube-demo",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "An aggregated API Server",
+	Long:  `This is an aggregated API Server, wrote manually`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	// Run: func(cmd *cobra.Command, args []string) { },
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
-func Execute() {
-	err := rootCmd.Execute()
-	if err != nil {
-		os.Exit(1)
+func NewCommandStartServer(stopCh <-chan struct{}) *cobra.Command {
+	options := NewServerOptions()
+	rootCmd.RunE = func(c *cobra.Command, args []string) error {
+		if err := options.Complete(); err != nil {
+			return err
+		}
+		if err := options.Validate(); err != nil {
+			return err
+		}
+		if err := run(options, stopCh); err != nil {
+			return err
+		}
+		return nil
 	}
+	flags := rootCmd.Flags()
+	options.RecommendedOptions.AddFlags(flags)
+	return rootCmd
 }
 
-func init() {
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
+func run(o *ServerOptions, stopCh <-chan struct{}) error {
+	c, err := o.Config()
+	if err != nil {
+		return err
+	}
 
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.kube-demo.yaml)")
+	s, err := c.Complete().NewServer()
+	if err != nil {
+		return err
+	}
 
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	s.GenericAPIServer.AddPostStartHook("start-provision-server-informers",
+		func(context gserver.PostStartHookContext) error {
+			c.GenericConfig.SharedInformerFactory.Start(context.Done())
+			o.SharedInformerFactory.Start(context.Done())
+			return nil
+		})
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-stopCh
+		cancel()
+	}()
+	return s.GenericAPIServer.PrepareRun().PrepareRun().PrepareRun().RunWithContext(ctx)
 }
-
-
